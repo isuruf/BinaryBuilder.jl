@@ -568,3 +568,34 @@ function product_hashes_from_github_release(repo_name::AbstractString, tag_name:
 
     return product_hashes
 end
+
+"""
+Download build scripts and install them. Returns the list of products of all the
+build scripts. scripts should be a dictionary mapping a url to a SHA256 hash, or
+an array of tuples of (url, hash)
+"""
+function download_and_install_build_scripts(scripts, prefix::AbstractString)
+    downloads_dir = joinpath(prefix, "downloads")
+    all_products = LibraryProduct[]
+
+    for (url, hash) in dependencies
+        if (basename(url) == "build.jl")
+            tmp_file_name = "build_$hash.jl"
+        else
+            tmp_file_name = basename(url)
+        end
+        tmp_file = joinpath(downloads_dir, tmp_file_name)
+        download_verify(url, hash, tmp_file, force=true)
+        contents = read(tmp_file, String)
+        m = Module(:__anon__)
+        products = eval(m, quote
+            using BinaryProvider
+            function write_deps_file(path, products) end
+            ARGS = [$prefix]
+            include_string($(contents))
+            products
+        end)
+        append!(all_products, products)
+    end
+    all_products
+end
